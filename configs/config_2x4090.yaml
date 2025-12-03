@@ -1,0 +1,74 @@
+# =============================================================================
+# JiT Configuration for 2×RTX 4090 (24GB VRAM each)
+# =============================================================================
+# This configuration is optimized for dual RTX 4090 GPUs.
+# Expected VRAM usage: ~18-20GB per GPU
+# Effective batch size: batch_size × num_gpus × gradient_accumulation_steps
+# =============================================================================
+
+# Model Configuration
+model: "JiT-B/32"
+img_size: 256
+patch_size: 32
+
+# Training Hyperparameters
+epochs: 300
+warmup_epochs: 5
+batch_size: 24
+blr: 5.0e-5
+weight_decay: 0.0
+
+# Memory Optimization
+gradient_accumulation_steps: 4
+use_gradient_checkpointing: false  # Enable if OOM, adds ~20% training time
+compile_model: false  # Optional torch.compile optimization
+
+# Dropout Settings
+attn_dropout: 0.0
+proj_dropout: 0.0
+
+# Noise Parameters
+P_mean: -0.8
+P_std: 0.8
+noise_scale: 1.0
+t_eps: 0.05
+label_drop_prob: 0.1
+
+# EMA Decay
+ema_decay1: 0.9999
+ema_decay2: 0.9996
+
+# Sampling Configuration
+sampling_method: "heun"
+num_sampling_steps: 50
+cfg: 2.9
+interval_min: 0.1
+interval_max: 1.0
+
+# Evaluation
+eval_freq: 50
+gen_bsz: 32
+num_images: 10000
+online_eval: true
+
+# Data Loading
+num_workers: 8
+pin_mem: true
+
+# Logging
+log_freq: 100
+save_last_freq: 5
+
+# Dataset
+class_num: 1000
+
+# =============================================================================
+# Memory Usage Estimates for 2×RTX 4090:
+# =============================================================================
+# JiT-B/32 with batch_size=24:
+#   - Without gradient checkpointing: ~18GB per GPU
+#   - With gradient checkpointing: ~14GB per GPU (enable if needed)
+#
+# Effective batch size calculation:
+#   24 (batch_size) × 2 (GPUs) × 4 (gradient_accumulation) = 192
+# =============================================================================

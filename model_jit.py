@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import math
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 from util.model_util import VisionRotaryEmbeddingFast, get_2d_sincos_pos_embed, RMSNorm
 
 
@@ -220,7 +221,8 @@ class JiT(nn.Module):
         num_classes=1000,
         bottleneck_dim=128,
         in_context_len=32,
-        in_context_start=8
+        in_context_start=8,
+        use_checkpoint=False
     ):
         super().__init__()
         self.in_channels = in_channels
@@ -232,6 +234,7 @@ class JiT(nn.Module):
         self.in_context_len = in_context_len
         self.in_context_start = in_context_start
         self.num_classes = num_classes
+        self.use_checkpoint = use_checkpoint
 
         # time and class embed
         self.t_embedder = TimestepEmbedder(hidden_size)
@@ -349,7 +352,12 @@ class JiT(nn.Module):
                 in_context_tokens = y_emb.unsqueeze(1).repeat(1, self.in_context_len, 1)
                 in_context_tokens += self.in_context_posemb
                 x = torch.cat([in_context_tokens, x], dim=1)
-            x = block(x, c, self.feat_rope if i < self.in_context_start else self.feat_rope_incontext)
+            
+            rope = self.feat_rope if i < self.in_context_start else self.feat_rope_incontext
+            if self.use_checkpoint and self.training:
+                x = checkpoint(block, x, c, rope, use_reentrant=False)
+            else:
+                x = block(x, c, rope)
 
         x = x[:, self.in_context_len:]
 

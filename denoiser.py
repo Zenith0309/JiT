@@ -15,6 +15,7 @@ class Denoiser(nn.Module):
             num_classes=args.class_num,
             attn_drop=args.attn_dropout,
             proj_drop=args.proj_dropout,
+            use_checkpoint=getattr(args, 'use_gradient_checkpointing', False),
         )
         self.img_size = args.img_size
         self.num_classes = args.class_num

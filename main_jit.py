@@ -65,6 +65,14 @@ def get_args_parser():
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
     parser.set_defaults(pin_mem=True)
 
+    # memory optimization
+    parser.add_argument('--gradient_accumulation_steps', default=1, type=int,
+                        help='Number of gradient accumulation steps')
+    parser.add_argument('--use_gradient_checkpointing', action='store_true',
+                        help='Enable gradient checkpointing to save memory')
+    parser.add_argument('--compile_model', action='store_true',
+                        help='Use torch.compile optimization (optional)')
+
     # sampling
     parser.add_argument('--sampling_method', default='heun', type=str,
                         help='ODE samping method')
@@ -171,13 +179,14 @@ def main(args):
 
     model.to(device)
 
-    eff_batch_size = args.batch_size * misc.get_world_size()
+    eff_batch_size = args.batch_size * misc.get_world_size() * args.gradient_accumulation_steps
     if args.lr is None:  # only base_lr (blr) is specified
         args.lr = args.blr * eff_batch_size / 256
 
     print("Base lr: {:.2e}".format(args.lr * 256 / eff_batch_size))
     print("Actual lr: {:.2e}".format(args.lr))
     print("Effective batch size: %d" % eff_batch_size)
+    print("Gradient accumulation steps: %d" % args.gradient_accumulation_steps)
 
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
     model_without_ddp = model.module

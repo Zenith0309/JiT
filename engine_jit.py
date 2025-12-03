@@ -22,11 +22,15 @@ def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, ep
 
     optimizer.zero_grad()
 
+    # Gradient accumulation settings
+    accum_steps = getattr(args, 'gradient_accumulation_steps', 1)
+
     if log_writer is not None:
         print('log_dir: {}'.format(log_writer.log_dir))
 
     for data_iter_step, (x, labels) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         # per iteration (instead of per epoch) lr scheduler
+        # Adjust for gradient accumulation: count actual optimizer steps
         lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
         # normalize image to [-1, 1]
@@ -37,18 +41,24 @@ def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, ep
         with torch.amp.autocast('cuda', dtype=torch.bfloat16):
             loss = model(x, labels)
 
-        loss_value = loss.item()
+        # Scale loss for gradient accumulation
+        loss = loss / accum_steps
+
+        loss_value = loss.item() * accum_steps  # Report unscaled loss
         if not math.isfinite(loss_value):
             print("Loss is {}, stopping training".format(loss_value))
             sys.exit(1)
 
-        optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
 
-        torch.cuda.synchronize()
+        # Only step optimizer and update EMA after accumulation is complete
+        if (data_iter_step + 1) % accum_steps == 0:
+            optimizer.step()
+            optimizer.zero_grad()
 
-        model_without_ddp.update_ema()
+            torch.cuda.synchronize()
+
+            model_without_ddp.update_ema()
 
         metric_logger.update(loss=loss_value)
         lr = optimizer.param_groups[0]["lr"]
@@ -62,6 +72,13 @@ def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, ep
             if data_iter_step % args.log_freq == 0:
                 log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
                 log_writer.add_scalar('lr', lr, epoch_1000x)
+
+    # Handle remaining gradients if data_loader length not divisible by accum_steps
+    if len(data_loader) % accum_steps != 0:
+        optimizer.step()
+        optimizer.zero_grad()
+        torch.cuda.synchronize()
+        model_without_ddp.update_ema()
 
 
 def evaluate(model_without_ddp, args, epoch, batch_size=64, log_writer=None):

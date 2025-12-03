@@ -98,6 +98,100 @@ main_jit.py \
 --data_path ${IMAGENET_PATH} --online_eval
 ```
 
+### Training on 2×RTX 4090 (Local Training)
+
+This section provides optimized configurations for training JiT on consumer GPUs with limited VRAM.
+
+#### Hardware Requirements
+- 2× NVIDIA RTX 4090 (24GB VRAM each)
+- 64GB+ System RAM recommended
+- NVMe SSD for dataset storage
+
+#### Recommended Configuration
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Model | JiT-B/32 | Smaller patch size reduces sequence length |
+| Image Size | 256×256 | Standard resolution |
+| Batch Size | 24 | Per GPU |
+| Gradient Accumulation | 4 | Effective batch size = 24 × 2 × 4 = 192 |
+| VRAM Usage | ~18-20GB | Per GPU |
+
+#### Quick Start
+
+**Option 1: Use the provided script**
+```bash
+# Set your ImageNet path
+export IMAGENET_PATH=/path/to/imagenet
+export OUTPUT_DIR=./output_2x4090
+
+# Run training
+bash scripts/train_2x4090.sh
+```
+
+**Option 2: Run directly**
+```bash
+torchrun --nproc_per_node=2 --nnodes=1 --node_rank=0 \
+main_jit.py \
+--model JiT-B/32 \
+--proj_dropout 0.0 \
+--P_mean -0.8 --P_std 0.8 \
+--img_size 256 --noise_scale 1.0 \
+--batch_size 24 \
+--gradient_accumulation_steps 4 \
+--blr 5e-5 \
+--epochs 300 \
+--warmup_epochs 5 \
+--eval_freq 50 \
+--gen_bsz 32 \
+--num_images 10000 \
+--cfg 2.9 --interval_min 0.1 --interval_max 1.0 \
+--num_workers 8 \
+--output_dir ${OUTPUT_DIR} --resume ${OUTPUT_DIR} \
+--data_path ${IMAGENET_PATH} --online_eval
+```
+
+#### Quick Validation (Small Dataset)
+
+For quick testing with smaller datasets (e.g., CIFAR-100 style):
+```bash
+export DATA_PATH=/path/to/small_dataset
+export CLASS_NUM=100
+
+bash scripts/train_2x4090_small.sh
+```
+
+#### Memory Optimization Options
+
+If you encounter OOM errors, try these options:
+
+1. **Enable Gradient Checkpointing** (reduces ~30% VRAM, adds ~20% training time):
+```bash
+--use_gradient_checkpointing
+```
+
+2. **Reduce batch size** and increase gradient accumulation:
+```bash
+--batch_size 16 --gradient_accumulation_steps 6
+```
+
+3. **Reduce num_workers** if system RAM is limited:
+```bash
+--num_workers 4
+```
+
+#### New Command Line Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--gradient_accumulation_steps` | 1 | Number of gradient accumulation steps |
+| `--use_gradient_checkpointing` | False | Enable gradient checkpointing to save VRAM |
+| `--compile_model` | False | Use torch.compile optimization (optional) |
+
+#### Expected Training Time
+- ~2-3 hours per epoch on 2×RTX 4090
+- Full 300 epoch training: ~25-40 days
+- Quick validation (50 epochs): ~4-6 days
+
 ### Evaluation
 
 Evaluate a trained JiT:
