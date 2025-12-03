@@ -40,6 +40,7 @@ main_jit.py \
 --num_images 10000 \
 --cfg 2.9 --interval_min 0.1 --interval_max 1.0 \
 --num_workers 8 \
+--class_num 1000 \
 --output_dir ${OUTPUT_DIR} --resume ${OUTPUT_DIR} \
 --data_path ${IMAGENET_PATH} --online_eval
 
