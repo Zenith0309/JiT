@@ -31,8 +31,8 @@ def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, ep
         print('log_dir: {}'.format(log_writer.log_dir))
 
     for data_iter_step, (x, labels) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
-        # Adjust learning rate at the start of each accumulation cycle
-        # This ensures LR is based on optimizer steps rather than data iterations
+        # Adjust learning rate based on epoch progress
+        # LR is adjusted at the start of each accumulation cycle for smooth scheduling
         if data_iter_step % accum_steps == 0:
             lr_sched.adjust_learning_rate(optimizer, data_iter_step / num_batches + epoch, args)
 
@@ -77,7 +77,9 @@ def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, ep
                 log_writer.add_scalar('lr', lr, epoch_1000x)
 
     # Handle remaining gradients if data_loader length not divisible by accum_steps
-    if num_batches % accum_steps != 0:
+    # Only step if there are actually pending gradients (i.e., we didn't just step)
+    remaining_steps = num_batches % accum_steps
+    if remaining_steps != 0:
         optimizer.step()
         optimizer.zero_grad()
         torch.cuda.synchronize()
