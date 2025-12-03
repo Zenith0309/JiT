@@ -24,14 +24,17 @@ def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, ep
 
     # Gradient accumulation settings
     accum_steps = getattr(args, 'gradient_accumulation_steps', 1)
+    # Calculate effective number of optimizer steps per epoch
+    num_batches = len(data_loader)
 
     if log_writer is not None:
         print('log_dir: {}'.format(log_writer.log_dir))
 
     for data_iter_step, (x, labels) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
-        # per iteration (instead of per epoch) lr scheduler
-        # Adjust for gradient accumulation: count actual optimizer steps
-        lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
+        # Adjust learning rate at the start of each accumulation cycle
+        # This ensures LR is based on optimizer steps rather than data iterations
+        if data_iter_step % accum_steps == 0:
+            lr_sched.adjust_learning_rate(optimizer, data_iter_step / num_batches + epoch, args)
 
         # normalize image to [-1, 1]
         x = x.to(device, non_blocking=True).to(torch.float32).div_(255)
@@ -68,13 +71,13 @@ def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, ep
 
         if log_writer is not None:
             # Use epoch_1000x as the x-axis in TensorBoard to calibrate curves.
-            epoch_1000x = int((data_iter_step / len(data_loader) + epoch) * 1000)
+            epoch_1000x = int((data_iter_step / num_batches + epoch) * 1000)
             if data_iter_step % args.log_freq == 0:
                 log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
                 log_writer.add_scalar('lr', lr, epoch_1000x)
 
     # Handle remaining gradients if data_loader length not divisible by accum_steps
-    if len(data_loader) % accum_steps != 0:
+    if num_batches % accum_steps != 0:
         optimizer.step()
         optimizer.zero_grad()
         torch.cuda.synchronize()

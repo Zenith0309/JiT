@@ -188,8 +188,9 @@ If you encounter OOM errors, try these options:
 | `--compile_model` | False | Use torch.compile optimization (optional) |
 
 #### Expected Training Time
-- ~2-3 hours per epoch on 2×RTX 4090
-- Full 300 epoch training: ~25-40 days
+Training time depends on dataset size and I/O speed. For ImageNet with the recommended settings:
+- ~2-3 hours per epoch on 2×RTX 4090 (varies with storage speed)
+- Full 300 epoch training: ~25-38 days
 - Quick validation (50 epochs): ~4-6 days
 
 ### Evaluation
